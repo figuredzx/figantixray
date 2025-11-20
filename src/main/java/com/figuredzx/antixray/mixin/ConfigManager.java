@@ -221,10 +221,23 @@ public class ConfigManager {
         return false;
     }
 
+    // 新增：OP玩家记录开关
+    public static boolean isOpRecordEnabled() {
+        return config.recordOpPlayers;
+    }
+
+    // 新增：设置OP玩家记录开关
+    public static void setOpRecordEnabled(boolean enabled) {
+        config.recordOpPlayers = enabled;
+        saveConfig();
+        LOGGER.info("OP player recording {}", enabled ? "enabled" : "disabled");
+    }
+
     // Config class
     private static class ModConfig {
         public int threshold = 64;
         public String deletePassword = "default_password_123"; // 默认删除密码
+        public boolean recordOpPlayers = true; // 是否记录OP玩家的挖掘数据
         public List<String> monitoredBlocks = new ArrayList<>(Arrays.asList(
                 "minecraft:gold_ore",
                 "minecraft:deepslate_gold_ore",

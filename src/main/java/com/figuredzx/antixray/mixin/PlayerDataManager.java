@@ -30,7 +30,61 @@ public class PlayerDataManager {
         ensureDataDirectoryExists();
         loadQuickAccessData();
     }
+// 在 PlayerDataManager 类中添加以下方法
 
+    /**
+     * 删除指定玩家的所有挖掘数据
+     */
+    public static int deletePlayerData(String playerName) {
+        int deletedCount = 0;
+
+        // 从内存数据中删除
+        Iterator<Map.Entry<UUID, PlayerMiningData>> iterator = playerData.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<UUID, PlayerMiningData> entry = iterator.next();
+            if (entry.getValue().playerName != null && entry.getValue().playerName.equals(playerName)) {
+                iterator.remove();
+                deletedCount++;
+                break;
+            }
+        }
+
+        // 删除玩家数据文件
+        File playerDir = new File(playersDirectory, cleanFileName(playerName));
+        if (playerDir.exists()) {
+            File[] files = playerDir.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    if (file.delete()) {
+                        deletedCount++;
+                    }
+                }
+            }
+            // 删除玩家目录
+            if (playerDir.delete()) {
+                LOGGER.info("Deleted player directory: {}", playerName);
+            }
+        }
+
+        // 更新快速访问文件
+        saveQuickAccessData();
+
+        LOGGER.info("Deleted all data for player: {}, total {} entries", playerName, deletedCount);
+        return deletedCount;
+    }
+
+    /**
+     * 获取所有玩家的名称列表
+     */
+    public static List<String> getAllPlayerNames() {
+        List<String> playerNames = new ArrayList<>();
+        for (PlayerMiningData data : playerData.values()) {
+            if (data.playerName != null && !data.playerName.isEmpty()) {
+                playerNames.add(data.playerName);
+            }
+        }
+        return playerNames;
+    }
     public static void recordBlockBreak(ServerPlayerEntity player, String blockId) {
         UUID playerId = player.getUuid();
         String playerName = player.getGameProfile().getName();

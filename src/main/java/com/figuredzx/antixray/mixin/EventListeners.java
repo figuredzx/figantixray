@@ -9,9 +9,14 @@ public class EventListeners {
 
     public static void register() {
         // Listen for block break events
-        PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, blockEntity) -> {
+        PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, entity) -> {
             if (player instanceof ServerPlayerEntity serverPlayer) {
                 try {
+                    // 检查是否记录OP玩家
+                    if (!ConfigManager.isOpRecordEnabled() && serverPlayer.hasPermissionLevel(2)) {
+                        return; // 不记录OP玩家
+                    }
+
                     Identifier blockId = Registries.BLOCK.getId(state.getBlock());
 
                     if (ConfigManager.isBlockMonitored(blockId)) {

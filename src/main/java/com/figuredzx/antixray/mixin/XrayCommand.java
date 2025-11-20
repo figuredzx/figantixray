@@ -48,13 +48,9 @@ public class XrayCommand {
                             return 0;
                         })
                 )
-                // 修复：简化 addblock 命令，只保留一个参数版本
                 .then(CommandManager.literal("addblock")
                         .then(CommandManager.argument("block_id", StringArgumentType.string())
-                                .executes(context -> {
-                                    // 直接在这里调用方法，避免方法引用歧义
-                                    return addMonitoredBlock(context, StringArgumentType.getString(context, "block_id"));
-                                })
+                                .executes(context -> addMonitoredBlock(context, StringArgumentType.getString(context, "block_id")))
                         )
                         .executes(context -> {
                             context.getSource().sendMessage(Text.literal("用法: /figantixray addblock \"<方块ID>\"").formatted(Formatting.YELLOW));
@@ -110,6 +106,63 @@ public class XrayCommand {
                 .then(CommandManager.literal("listblocks")
                         .executes(XrayCommand::listMonitoredBlocks)
                 )
+                // OP玩家记录开关命令
+                .then(CommandManager.literal("oprecord")
+                        .then(CommandManager.literal("on")
+                                .executes(context -> {
+                                    ConfigManager.setOpRecordEnabled(true);
+                                    context.getSource().sendMessage(Text.literal("✅ 已开启OP玩家记录").formatted(Formatting.GREEN));
+                                    return 1;
+                                })
+                        )
+                        .then(CommandManager.literal("off")
+                                .executes(context -> {
+                                    ConfigManager.setOpRecordEnabled(false);
+                                    context.getSource().sendMessage(Text.literal("✅ 已关闭OP玩家记录").formatted(Formatting.GREEN));
+                                    context.getSource().sendMessage(Text.literal("注意: OP玩家的挖掘行为将不再被记录").formatted(Formatting.YELLOW));
+                                    return 1;
+                                })
+                        )
+                        .executes(context -> {
+                            boolean isEnabled = ConfigManager.isOpRecordEnabled();
+                            context.getSource().sendMessage(Text.literal("OP玩家记录状态: " + (isEnabled ? "已开启" : "已关闭")).formatted(
+                                    isEnabled ? Formatting.GREEN : Formatting.RED
+                            ));
+                            context.getSource().sendMessage(Text.literal("用法: /figantixray oprecord <on|off>").formatted(Formatting.YELLOW));
+                            context.getSource().sendMessage(Text.literal("例如: /figantixray oprecord off - 关闭OP玩家记录").formatted(Formatting.WHITE));
+                            return 1;
+                        })
+                )
+                // 删除玩家数据命令
+                .then(CommandManager.literal("deleteplayer")
+                        .then(CommandManager.argument("player_name", StringArgumentType.string())
+                                .then(CommandManager.argument("password", StringArgumentType.string())
+                                        .executes(context -> deletePlayerData(
+                                                context,
+                                                StringArgumentType.getString(context, "player_name"),
+                                                StringArgumentType.getString(context, "password")
+                                        ))
+                                )
+                        )
+                        .executes(context -> {
+                            context.getSource().sendMessage(Text.literal("用法: /figantixray deleteplayer <玩家名> <密码>").formatted(Formatting.YELLOW));
+                            context.getSource().sendMessage(Text.literal("例如: /figantixray deleteplayer Steve my_password").formatted(Formatting.WHITE));
+                            context.getSource().sendMessage(Text.literal("警告: 此操作将永久删除该玩家的所有挖掘数据，不可恢复！").formatted(Formatting.RED));
+                            context.getSource().sendMessage(Text.literal("注意: 默认密码是 'default_password_123'").formatted(Formatting.GRAY));
+
+                            // 显示所有玩家列表
+                            List<String> playerNames = PlayerDataManager.getAllPlayerNames();
+                            if (!playerNames.isEmpty()) {
+                                context.getSource().sendMessage(Text.literal("当前有数据的玩家 (" + playerNames.size() + " 名):").formatted(Formatting.AQUA));
+                                for (String name : playerNames) {
+                                    context.getSource().sendMessage(Text.literal(" - " + name).formatted(Formatting.WHITE));
+                                }
+                            } else {
+                                context.getSource().sendMessage(Text.literal("当前没有玩家数据").formatted(Formatting.GRAY));
+                            }
+                            return 0;
+                        })
+                )
                 .then(CommandManager.literal("deleteblockdata")
                         .then(CommandManager.argument("block_id", StringArgumentType.string())
                                 .then(CommandManager.argument("password", StringArgumentType.string())
@@ -147,65 +200,98 @@ public class XrayCommand {
                             return 0;
                         })
                 )
+                // 详细帮助命令
+                .then(CommandManager.literal("help")
+                        .executes(XrayCommand::showDetailedHelp)
+                )
                 .executes(context -> {
-                    context.getSource().sendMessage(Text.literal("=== Figanti反透视模组命令帮助 ===").formatted(Formatting.GOLD));
-                    context.getSource().sendMessage(Text.literal("/figantixray status - 查看模组状态").formatted(Formatting.YELLOW));
-                    context.getSource().sendMessage(Text.literal("/figantixray threshold <数量> - 设置全局警告阈值").formatted(Formatting.YELLOW));
-                    context.getSource().sendMessage(Text.literal("/figantixray blockthreshold <数量> \"<方块ID>\" - 设置特定方块警告阈值").formatted(Formatting.YELLOW));
-                    context.getSource().sendMessage(Text.literal("/figantixray addblock \"<方块ID>\" - 添加监控方块").formatted(Formatting.YELLOW));
-                    context.getSource().sendMessage(Text.literal("/figantixray setblockname \"<方块ID>\" \"<自定义名称>\" - 设置方块自定义名称").formatted(Formatting.YELLOW));
-                    context.getSource().sendMessage(Text.literal("/figantixray removeblock \"<方块ID>\" - 移除监控方块").formatted(Formatting.YELLOW));
-                    context.getSource().sendMessage(Text.literal("/figantixray listblocks - 列出所有监控方块").formatted(Formatting.YELLOW));
-                    context.getSource().sendMessage(Text.literal("/figantixray check - 检查所有玩家").formatted(Formatting.YELLOW));
-                    context.getSource().sendMessage(Text.literal("/figantixray check <玩家名> - 检查特定玩家").formatted(Formatting.YELLOW));
-                    context.getSource().sendMessage(Text.literal("/figantixray deleteblockdata \"<方块ID>\" <密码> - 删除方块历史数据").formatted(Formatting.YELLOW));
-                    context.getSource().sendMessage(Text.literal("/figantixray changepassword <旧密码> <新密码> - 修改删除密码").formatted(Formatting.YELLOW));
-                    context.getSource().sendMessage(Text.literal("注意: 所有带冒号的方块ID都需要用引号包裹").formatted(Formatting.RED));
+                    showQuickHelp(context.getSource());
                     return 1;
                 })
         );
     }
 
-    // 修复：明确定义 addMonitoredBlock 方法
-    private static int addMonitoredBlock(CommandContext<ServerCommandSource> context, String blockId) {
+    /**
+     * 显示详细帮助信息
+     */
+    private static int showDetailedHelp(CommandContext<ServerCommandSource> context) {
         ServerCommandSource source = context.getSource();
 
-        if (!isValidBlockId(blockId)) {
-            source.sendMessage(Text.literal("错误: 方块ID格式不正确").formatted(Formatting.RED));
-            source.sendMessage(Text.literal("方块ID应该是 '命名空间:方块名' 格式，例如 'minecraft:diamond_ore'").formatted(Formatting.YELLOW));
-            source.sendMessage(Text.literal("请使用引号包裹方块ID: /figantixray addblock \"minecraft:diamond_ore\"").formatted(Formatting.RED));
-            return 0;
-        }
+        source.sendMessage(Text.literal("=== Figanti反透视模组详细帮助 ===").formatted(Formatting.GOLD));
 
-        Set<String> monitoredBlocks = ConfigManager.getMonitoredBlocks();
-        if (monitoredBlocks.contains(blockId)) {
-            String displayName = ConfigManager.getBlockDisplayName(blockId);
-            source.sendMessage(Text.literal("方块 " + displayName + " (" + blockId + ") 已经在监控列表中").formatted(Formatting.YELLOW));
-            return 0;
-        }
+        source.sendMessage(Text.literal("📊 状态监控命令:").formatted(Formatting.AQUA));
+        source.sendMessage(Text.literal("  /figantixray status - 查看模组运行状态、全局阈值、监控方块数量等").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  /figantixray check - 检查所有玩家的挖掘数据，显示超过阈值的玩家").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  /figantixray check <玩家名> - 检查特定玩家的详细挖掘数据").formatted(Formatting.WHITE));
 
-        try {
-            ConfigManager.addMonitoredBlock(blockId);
-            String displayName = ConfigManager.getBlockDisplayName(blockId);
+        source.sendMessage(Text.literal("🎯 阈值设置命令:").formatted(Formatting.AQUA));
+        source.sendMessage(Text.literal("  /figantixray threshold <数量> - 设置全局警告阈值（默认64）").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  /figantixray blockthreshold <数量> \"<方块ID>\" - 设置特定方块的检测阈值").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("    设置为0时使用全局阈值，例如: /figantixray blockthreshold 32 \"minecraft:diamond_ore\"").formatted(Formatting.GRAY));
 
-            source.sendMessage(Text.literal("✅ 已添加监控方块: " + displayName).formatted(Formatting.GREEN));
-            source.sendMessage(Text.literal("当前监控方块数量: " + ConfigManager.getMonitoredBlocks().size()).formatted(Formatting.GRAY));
-            source.sendMessage(Text.literal("💡 提示: 使用 /figantixray setblockname \"" + blockId + "\" \"<名称>\" 设置自定义名称").formatted(Formatting.AQUA));
+        source.sendMessage(Text.literal("🧱 方块管理命令:").formatted(Formatting.AQUA));
+        source.sendMessage(Text.literal("  /figantixray addblock \"<方块ID>\" - 添加监控方块").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("    例如: /figantixray addblock \"minecraft:diamond_ore\"").formatted(Formatting.GRAY));
+        source.sendMessage(Text.literal("  /figantixray setblockname \"<方块ID>\" \"<自定义名称>\" - 设置方块显示名称").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("    例如: /figantixray setblockname \"minecraft:diamond_ore\" \"珍贵钻石矿\"").formatted(Formatting.GRAY));
+        source.sendMessage(Text.literal("  /figantixray removeblock \"<方块ID>\" - 移除监控方块").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  /figantixray listblocks - 列出所有监控方块及其阈值").formatted(Formatting.WHITE));
 
-            return 1;
-        } catch (Exception e) {
-            String errorMsg = "添加方块失败";
-            if (e.getMessage() != null) {
-                errorMsg += ": " + e.getMessage();
-            } else {
-                errorMsg += "，请检查控制台日志获取详细信息";
-            }
-            source.sendMessage(Text.literal(errorMsg).formatted(Formatting.RED));
-            source.sendMessage(Text.literal("请确保使用正确的方块ID格式并用引号包裹").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("👮 OP管理命令:").formatted(Formatting.AQUA));
+        source.sendMessage(Text.literal("  /figantixray oprecord on - 开启OP玩家记录（默认开启）").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  /figantixray oprecord off - 关闭OP玩家记录").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  /figantixray oprecord - 查看当前OP记录状态").formatted(Formatting.WHITE));
 
-            FigantiXray.LOGGER.error("添加方块失败: {}", blockId, e);
-            return 0;
-        }
+        source.sendMessage(Text.literal("🗑️ 数据清理命令:").formatted(Formatting.AQUA));
+        source.sendMessage(Text.literal("  /figantixray deleteplayer <玩家名> <密码> - 删除指定玩家的所有数据").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("    例如: /figantixray deleteplayer Steve my_password").formatted(Formatting.GRAY));
+        source.sendMessage(Text.literal("  /figantixray deleteblockdata \"<方块ID>\" <密码> - 删除指定方块的所有历史数据").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("    例如: /figantixray deleteblockdata \"minecraft:diamond_ore\" my_password").formatted(Formatting.GRAY));
+
+        source.sendMessage(Text.literal("🔐 安全设置命令:").formatted(Formatting.AQUA));
+        source.sendMessage(Text.literal("  /figantixray changepassword <旧密码> <新密码> - 修改删除操作的密码").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("    默认密码: default_password_123").formatted(Formatting.GRAY));
+
+        source.sendMessage(Text.literal("📖 帮助命令:").formatted(Formatting.AQUA));
+        source.sendMessage(Text.literal("  /figantixray help - 显示此详细帮助信息").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  /figantixray - 显示快速命令列表").formatted(Formatting.WHITE));
+
+        source.sendMessage(Text.literal("⚠️ 重要注意事项:").formatted(Formatting.RED));
+        source.sendMessage(Text.literal("  • 所有包含冒号的方块ID必须用引号包裹").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("  • 删除操作需要密码验证，请妥善保管密码").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("  • 所有命令需要OP权限（权限等级2）").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("  • 数据会自动保存，服务器关闭时也会保存").formatted(Formatting.YELLOW));
+
+        source.sendMessage(Text.literal("💡 使用技巧:").formatted(Formatting.GREEN));
+        source.sendMessage(Text.literal("  • 初始设置: 先修改密码，然后添加需要监控的方块").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  • 日常监控: 定期使用 status 和 check 命令查看状态").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  • 精细调整: 为稀有方块设置较低的阈值").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  • 数据清理: 定期清理不需要的历史数据").formatted(Formatting.WHITE));
+
+        return 1;
+    }
+
+    /**
+     * 显示快速帮助信息
+     */
+    private static void showQuickHelp(ServerCommandSource source) {
+        source.sendMessage(Text.literal("=== Figanti反透视模组命令帮助 ===").formatted(Formatting.GOLD));
+        source.sendMessage(Text.literal("/figantixray status - 查看模组状态").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("/figantixray threshold <数量> - 设置全局警告阈值").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("/figantixray blockthreshold <数量> \"<方块ID>\" - 设置特定方块警告阈值").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("/figantixray addblock \"<方块ID>\" - 添加监控方块").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("/figantixray setblockname \"<方块ID>\" \"<自定义名称>\" - 设置方块自定义名称").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("/figantixray removeblock \"<方块ID>\" - 移除监控方块").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("/figantixray listblocks - 列出所有监控方块").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("/figantixray check - 检查所有玩家").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("/figantixray check <玩家名> - 检查特定玩家").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("/figantixray oprecord <on|off> - 开关OP玩家记录").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("/figantixray deleteplayer <玩家名> <密码> - 删除玩家数据").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("/figantixray deleteblockdata \"<方块ID>\" <密码> - 删除方块历史数据").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("/figantixray changepassword <旧密码> <新密码> - 修改删除密码").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("/figantixray help - 显示详细帮助信息").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("注意: 所有带冒号的方块ID都需要用引号包裹").formatted(Formatting.RED));
+        source.sendMessage(Text.literal("输入 /figantixray help 查看详细使用说明").formatted(Formatting.AQUA));
     }
 
     // 其他方法保持不变...
@@ -262,6 +348,9 @@ public class XrayCommand {
 
         source.sendMessage(Text.literal("=== Figanti反透视状态 ===").formatted(Formatting.GOLD));
         source.sendMessage(Text.literal("全局警告阈值: " + ConfigManager.getThreshold() + " 个方块"));
+        source.sendMessage(Text.literal("OP玩家记录: " + (ConfigManager.isOpRecordEnabled() ? "已开启" : "已关闭")).formatted(
+                ConfigManager.isOpRecordEnabled() ? Formatting.GREEN : Formatting.RED
+        ));
 
         Map<String, Integer> blockThresholds = ConfigManager.getBlockThresholds();
         if (!blockThresholds.isEmpty()) {
@@ -313,6 +402,47 @@ public class XrayCommand {
             return 1;
         } catch (Exception e) {
             source.sendMessage(Text.literal("设置方块阈值失败: " + e.getMessage()).formatted(Formatting.RED));
+            return 0;
+        }
+    }
+
+    private static int addMonitoredBlock(CommandContext<ServerCommandSource> context, String blockId) {
+        ServerCommandSource source = context.getSource();
+
+        if (!isValidBlockId(blockId)) {
+            source.sendMessage(Text.literal("错误: 方块ID格式不正确").formatted(Formatting.RED));
+            source.sendMessage(Text.literal("方块ID应该是 '命名空间:方块名' 格式，例如 'minecraft:diamond_ore'").formatted(Formatting.YELLOW));
+            source.sendMessage(Text.literal("请使用引号包裹方块ID: /figantixray addblock \"minecraft:diamond_ore\"").formatted(Formatting.RED));
+            return 0;
+        }
+
+        Set<String> monitoredBlocks = ConfigManager.getMonitoredBlocks();
+        if (monitoredBlocks.contains(blockId)) {
+            String displayName = ConfigManager.getBlockDisplayName(blockId);
+            source.sendMessage(Text.literal("方块 " + displayName + " (" + blockId + ") 已经在监控列表中").formatted(Formatting.YELLOW));
+            return 0;
+        }
+
+        try {
+            ConfigManager.addMonitoredBlock(blockId);
+            String displayName = ConfigManager.getBlockDisplayName(blockId);
+
+            source.sendMessage(Text.literal("✅ 已添加监控方块: " + displayName).formatted(Formatting.GREEN));
+            source.sendMessage(Text.literal("当前监控方块数量: " + ConfigManager.getMonitoredBlocks().size()).formatted(Formatting.GRAY));
+            source.sendMessage(Text.literal("💡 提示: 使用 /figantixray setblockname \"" + blockId + "\" \"<名称>\" 设置自定义名称").formatted(Formatting.AQUA));
+
+            return 1;
+        } catch (Exception e) {
+            String errorMsg = "添加方块失败";
+            if (e.getMessage() != null) {
+                errorMsg += ": " + e.getMessage();
+            } else {
+                errorMsg += "，请检查控制台日志获取详细信息";
+            }
+            source.sendMessage(Text.literal(errorMsg).formatted(Formatting.RED));
+            source.sendMessage(Text.literal("请确保使用正确的方块ID格式并用引号包裹").formatted(Formatting.YELLOW));
+
+            FigantiXray.LOGGER.error("添加方块失败: {}", blockId, e);
             return 0;
         }
     }
@@ -443,6 +573,50 @@ public class XrayCommand {
         }
 
         return blocks.size();
+    }
+
+    /**
+     * 删除玩家数据方法
+     */
+    private static int deletePlayerData(CommandContext<ServerCommandSource> context, String playerName, String password) {
+        ServerCommandSource source = context.getSource();
+
+        // 验证密码
+        if (!ConfigManager.verifyDeletePassword(password)) {
+            source.sendMessage(Text.literal("错误: 密码不正确").formatted(Formatting.RED));
+            source.sendMessage(Text.literal("请检查密码是否正确，默认密码是 'default_password_123'").formatted(Formatting.YELLOW));
+            return 0;
+        }
+
+        try {
+            // 检查玩家是否存在
+            PlayerDataManager.PlayerMiningData playerData = PlayerDataManager.getPlayerDataByName(playerName);
+            if (playerData == null) {
+                source.sendMessage(Text.literal("错误: 未找到玩家 " + playerName + " 的数据").formatted(Formatting.RED));
+
+                // 显示所有玩家列表
+                List<String> playerNames = PlayerDataManager.getAllPlayerNames();
+                if (!playerNames.isEmpty()) {
+                    source.sendMessage(Text.literal("当前有数据的玩家:").formatted(Formatting.AQUA));
+                    for (String name : playerNames) {
+                        source.sendMessage(Text.literal(" - " + name).formatted(Formatting.WHITE));
+                    }
+                }
+                return 0;
+            }
+
+            // 执行删除操作
+            int deletedCount = PlayerDataManager.deletePlayerData(playerName);
+
+            source.sendMessage(Text.literal("✅ 已成功删除玩家 " + playerName + " 的所有数据").formatted(Formatting.GREEN));
+            source.sendMessage(Text.literal("共清理了 " + deletedCount + " 条数据记录").formatted(Formatting.GREEN));
+            source.sendMessage(Text.literal("注意: 此操作不可恢复，相关数据已永久删除").formatted(Formatting.RED));
+
+            return 1;
+        } catch (Exception e) {
+            source.sendMessage(Text.literal("删除玩家数据失败: " + e.getMessage()).formatted(Formatting.RED));
+            return 0;
+        }
     }
 
     private static int deleteBlockData(CommandContext<ServerCommandSource> context, String blockId, String password) {
