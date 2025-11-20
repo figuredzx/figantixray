@@ -220,12 +220,10 @@ public class ConfigManager {
         }
         return false;
     }
-
     // 新增：OP玩家记录开关
     public static boolean isOpRecordEnabled() {
         return config.recordOpPlayers;
     }
-
     // 新增：设置OP玩家记录开关
     public static void setOpRecordEnabled(boolean enabled) {
         config.recordOpPlayers = enabled;
