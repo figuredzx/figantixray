@@ -206,12 +206,10 @@ public class ConfigManager {
         config.deletePassword = password;
         saveConfig();
     }
-
     // 新增：验证删除密码
     public static boolean verifyDeletePassword(String inputPassword) {
         return config.deletePassword.equals(inputPassword);
     }
-
     // 新增：修改删除密码（需要旧密码验证）
     public static boolean changeDeletePassword(String oldPassword, String newPassword) {
         if (verifyDeletePassword(oldPassword)) {

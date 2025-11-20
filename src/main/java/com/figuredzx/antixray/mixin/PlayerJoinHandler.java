@@ -16,7 +16,6 @@ public class PlayerJoinHandler {
     public static void register() {
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayerEntity player = handler.getPlayer();
-
             // Check for suspicious players when OP logs in
             if (player.hasPermissionLevel(2)) {
                 String currentDate = DATE_FORMAT.format(new Date());

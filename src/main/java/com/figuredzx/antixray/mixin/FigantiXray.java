@@ -14,7 +14,6 @@ public class FigantiXray implements DedicatedServerModInitializer {
     @Override
     public void onInitializeServer() {
         LOGGER.info("正在初始化 Figanti 反透视模组");
-
         try {
             // Initialize config and data managers
             ConfigManager.initialize();

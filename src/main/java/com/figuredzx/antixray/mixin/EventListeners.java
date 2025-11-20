@@ -16,7 +16,6 @@ public class EventListeners {
                     if (!ConfigManager.isOpRecordEnabled() && serverPlayer.hasPermissionLevel(2)) {
                         return; // 不记录OP玩家
                     }
-
                     Identifier blockId = Registries.BLOCK.getId(state.getBlock());
 
                     if (ConfigManager.isBlockMonitored(blockId)) {

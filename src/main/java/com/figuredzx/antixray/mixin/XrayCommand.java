@@ -38,6 +38,7 @@ public class XrayCommand {
                                                 StringArgumentType.getString(context, "block_id"),
                                                 IntegerArgumentType.getInteger(context, "amount")
                                         ))
+
                                 )
                         )
                         .executes(context -> {
