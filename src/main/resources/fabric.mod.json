@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "figantixray",
+  "version": "1.0.3",
+  "name": "Figanti Xray",
+  "description": "通过记录挖掘稀有矿石的数量来反矿透的服务器模组",
+  "authors": ["figuredzx"],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/figantixray/icon.png",
+  "environment": "server",
+  "entrypoints": {
+    "server": [
+      "com.figuredzx.antixray.mixin.FigantiXray"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.14.21",
+    "minecraft": "1.20.1",
+    "java": ">=17",
+    "fabric-api": "*"
+  }
+}
