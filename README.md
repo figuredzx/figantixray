@@ -1,4 +1,4 @@
-一个我的worldfabric1.20.1仅服务器依靠记录挖掘方块数据查找矿透作弊者的查询mod 该模组由deepseek生成
+一个我的世界fabric1.20.1仅服务器依靠记录挖掘方块数据查找矿透作弊者的查询mod 该模组由deepseek生成
 
 figantixray反矿透模组 - 完整使用指南
 
@@ -28,6 +28,12 @@ figantixray反矿透模组 是一款专为fabric1.20.1Minecraft服务器设计�
 独立阈值：为每个方块设置不同的敏感度
 智能回退：未设置独立阈值时自动使用全局阈值
 
+✨简单管理数据
+单独删除：每个人的数据可单独使用指令删除
+可以删除单个玩家/方块的所有数据
+不会影响其他玩家的数据
+需要密码验证，确保安全
+
 🔒 多重安全保护
 密码验证：删除敏感数据需要密码确认
 权限控制：所有命令需要OP权限（等级2）
@@ -56,6 +62,9 @@ figantixray反矿透模组 是一款专为fabric1.20.1Minecraft服务器设计�
 命令    功能    示例
 /figantixray deleteblockdata "<方块ID>" <密码>    删除方块历史数据
 /figantixray changepassword <旧密码> <新密码>    修改删除密码
+/figantixray oprecord <on/off>  开关op数据记录
+/figantixray deleteplayer  查看已记录玩家列表
+/figantixray deleteplayer <玩家名> <密码>  删除指定玩家数据
 
 🎪 特色功能详解
 
@@ -204,15 +213,6 @@ OP专属：所有命令需要权限等级2
 🔔 智能OP提醒系统
 📊 完整的中文界面
 💾 自动数据保存
-
-🔄 更新日志
-v1.0.1：基础监控功能
-
-v1.0.1：修复部分问题
-
-v1.0.2：新增多项内容
-
-v1.0.3：修复大部分严重问题
 
 🆘 技术支持
 常见问题
