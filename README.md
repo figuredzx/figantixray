@@ -1,4 +1,4 @@
-一个我的worldfabric1.20.1仅服务器依靠记录挖掘方块数据查找矿透作弊者的查询mod
+一个我的worldfabric1.20.1仅服务器依靠记录挖掘方块数据查找矿透作弊者的查询mod 该模组由deepseek生成
 
 figantixray反矿透模组 - 完整使用指南
 
