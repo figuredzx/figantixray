@@ -79,7 +79,7 @@ config/figantixray/data/
 └── violations/                        # 违规记录目录
     └── Steve/
         └── violation_20241201_143022.json
-        
+
 记录内容包含：
 精确时间戳：Unix时间戳，用于服务器回放
 位置信息：违规发生的坐标和维度
