@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "figantixray",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "name": "Figanti Xray",
   "description": "通过记录挖掘稀有矿石的数量来反矿透的服务器模组",
   "authors": ["figuredzx"],

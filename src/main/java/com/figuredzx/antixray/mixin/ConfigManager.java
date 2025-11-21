@@ -26,7 +26,6 @@ public class ConfigManager {
 
     // 存储方块特定阈值
     private static final Map<String, Integer> BLOCK_THRESHOLDS = new HashMap<>();
-
     static {
         // Initialize block name mapping
         BLOCK_NAMES.put("minecraft:gold_ore", "金矿");
@@ -196,21 +195,24 @@ public class ConfigManager {
         return new HashMap<>(BLOCK_THRESHOLDS);
     }
 
-    // 新增：获取删除密码
-    public static String getDeletePassword() {
-        return config.deletePassword;
-    }
-
-    // 新增：设置删除密码
+    /**
+     * 设置删除密码
+     */
     public static void setDeletePassword(String password) {
         config.deletePassword = password;
         saveConfig();
     }
-    // 新增：验证删除密码
+
+    /**
+     * 验证删除密码
+     */
     public static boolean verifyDeletePassword(String inputPassword) {
         return config.deletePassword.equals(inputPassword);
     }
-    // 新增：修改删除密码（需要旧密码验证）
+
+    /**
+     * 修改删除密码（需要旧密码验证）
+     */
     public static boolean changeDeletePassword(String oldPassword, String newPassword) {
         if (verifyDeletePassword(oldPassword)) {
             setDeletePassword(newPassword);
@@ -218,11 +220,17 @@ public class ConfigManager {
         }
         return false;
     }
-    // 新增：OP玩家记录开关
+
+    /**
+     * OP玩家记录开关
+     */
     public static boolean isOpRecordEnabled() {
         return config.recordOpPlayers;
     }
-    // 新增：设置OP玩家记录开关
+
+    /**
+     * 设置OP玩家记录开关
+     */
     public static void setOpRecordEnabled(boolean enabled) {
         config.recordOpPlayers = enabled;
         saveConfig();

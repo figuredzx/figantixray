@@ -16,10 +16,12 @@ public class EventListeners {
                     if (!ConfigManager.isOpRecordEnabled() && serverPlayer.hasPermissionLevel(2)) {
                         return; // 不记录OP玩家
                     }
+
                     Identifier blockId = Registries.BLOCK.getId(state.getBlock());
 
                     if (ConfigManager.isBlockMonitored(blockId)) {
-                        PlayerDataManager.recordBlockBreak(serverPlayer, blockId.toString());
+                        // 修改：传递位置和世界信息
+                        PlayerDataManager.recordBlockBreak(serverPlayer, blockId.toString(), pos, world);
                     }
                 } catch (Exception e) {
                     FigantiXray.LOGGER.warn("Failed to process block break event", e);

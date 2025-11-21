@@ -4,20 +4,40 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.io.File;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public class XrayCommand {
 
-    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd");
+    // 玩家名称自动补全提供器
+    private static final SuggestionProvider<ServerCommandSource> PLAYER_NAME_SUGGESTIONS =
+            (context, builder) -> {
+                List<String> playerNames = PlayerDataManager.getAllPlayerNames();
+                for (String name : playerNames) {
+                    builder.suggest(name);
+                }
+                return builder.buildFuture();
+            };
+
+    // 方块ID自动补全提供器（自动添加引号）
+    private static final SuggestionProvider<ServerCommandSource> BLOCK_ID_SUGGESTIONS =
+            (context, builder) -> {
+                Set<String> monitoredBlocks = ConfigManager.getMonitoredBlocks();
+                for (String blockId : monitoredBlocks) {
+                    // 自动为方块ID添加引号
+                    String displayName = ConfigManager.getBlockDisplayName(blockId);
+                    builder.suggest("\"" + blockId + "\"", Text.literal(displayName));
+                }
+                return builder.buildFuture();
+            };
 
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
         dispatcher.register(CommandManager.literal("figantixray")
@@ -33,12 +53,12 @@ public class XrayCommand {
                 .then(CommandManager.literal("blockthreshold")
                         .then(CommandManager.argument("amount", IntegerArgumentType.integer(0))
                                 .then(CommandManager.argument("block_id", StringArgumentType.string())
+                                        .suggests(BLOCK_ID_SUGGESTIONS)  // 方块ID自动补全
                                         .executes(context -> setBlockThreshold(
                                                 context,
                                                 StringArgumentType.getString(context, "block_id"),
                                                 IntegerArgumentType.getInteger(context, "amount")
                                         ))
-
                                 )
                         )
                         .executes(context -> {
@@ -70,6 +90,7 @@ public class XrayCommand {
                 )
                 .then(CommandManager.literal("removeblock")
                         .then(CommandManager.argument("block_id", StringArgumentType.string())
+                                .suggests(BLOCK_ID_SUGGESTIONS)  // 方块ID自动补全
                                 .executes(context -> removeMonitoredBlock(context, StringArgumentType.getString(context, "block_id")))
                         )
                         .executes(context -> {
@@ -83,6 +104,7 @@ public class XrayCommand {
                 )
                 .then(CommandManager.literal("setblockname")
                         .then(CommandManager.argument("block_id", StringArgumentType.string())
+                                .suggests(BLOCK_ID_SUGGESTIONS)  // 方块ID自动补全
                                 .then(CommandManager.argument("custom_name", StringArgumentType.string())
                                         .executes(context -> setBlockCustomName(
                                                 context,
@@ -101,6 +123,7 @@ public class XrayCommand {
                 .then(CommandManager.literal("check")
                         .executes(XrayCommand::checkAllPlayers)
                         .then(CommandManager.argument("player", StringArgumentType.string())
+                                .suggests(PLAYER_NAME_SUGGESTIONS)
                                 .executes(context -> checkPlayer(context, StringArgumentType.getString(context, "player")))
                         )
                 )
@@ -134,9 +157,94 @@ public class XrayCommand {
                             return 1;
                         })
                 )
+                // 减少玩家方块数量命令
+                .then(CommandManager.literal("reduceblock")
+                        .then(CommandManager.argument("player_name", StringArgumentType.string())
+                                .suggests(PLAYER_NAME_SUGGESTIONS)
+                                .then(CommandManager.argument("block_id", StringArgumentType.string())
+                                        .suggests(BLOCK_ID_SUGGESTIONS)  // 方块ID自动补全
+                                        .then(CommandManager.argument("amount", IntegerArgumentType.integer(1))
+                                                .then(CommandManager.argument("reason", StringArgumentType.greedyString())
+                                                        .executes(context -> reducePlayerBlock(
+                                                                context,
+                                                                StringArgumentType.getString(context, "player_name"),
+                                                                StringArgumentType.getString(context, "block_id"),
+                                                                IntegerArgumentType.getInteger(context, "amount"),
+                                                                StringArgumentType.getString(context, "reason")
+                                                        ))
+                                                )
+                                        )
+                                )
+                        )
+                        .executes(context -> {
+                            context.getSource().sendMessage(Text.literal("用法: /figantixray reduceblock <玩家名> <方块ID> <数量> <原因>").formatted(Formatting.YELLOW));
+                            context.getSource().sendMessage(Text.literal("例如: /figantixray reduceblock Steve minecraft:diamond_ore 5 \"工会奖励发放\"").formatted(Formatting.WHITE));
+                            context.getSource().sendMessage(Text.literal("功能: 减少玩家特定方块的数量，用于奖励发放等场景").formatted(Formatting.GRAY));
+                            context.getSource().sendMessage(Text.literal("注意: 方块ID需要用引号包裹（如果包含冒号）").formatted(Formatting.RED));
+
+                            // 显示有数据的玩家列表
+                            List<String> playerNames = PlayerDataManager.getAllPlayerNames();
+                            if (!playerNames.isEmpty()) {
+                                context.getSource().sendMessage(Text.literal("当前有数据的玩家 (" + playerNames.size() + " 名):").formatted(Formatting.AQUA));
+                                for (String name : playerNames) {
+                                    context.getSource().sendMessage(Text.literal(" - " + name).formatted(Formatting.WHITE));
+                                }
+                            }
+                            return 0;
+                        })
+                )
+                // 查看减少记录历史命令
+                .then(CommandManager.literal("reductionhistory")
+                        .then(CommandManager.argument("player_name", StringArgumentType.string())
+                                .suggests(PLAYER_NAME_SUGGESTIONS)
+                                .executes(context -> showReductionHistory(
+                                        context,
+                                        StringArgumentType.getString(context, "player_name")
+                                ))
+                        )
+                        .executes(context -> {
+                            context.getSource().sendMessage(Text.literal("用法: /figantixray reductionhistory <玩家名>").formatted(Formatting.YELLOW));
+                            context.getSource().sendMessage(Text.literal("例如: /figantixray reductionhistory Steve").formatted(Formatting.WHITE));
+                            context.getSource().sendMessage(Text.literal("功能: 查看玩家的方块减少记录历史").formatted(Formatting.GRAY));
+                            return 0;
+                        })
+                )
+                // 查看玩家违规记录命令
+                .then(CommandManager.literal("violationhistory")
+                        .then(CommandManager.argument("player_name", StringArgumentType.string())
+                                .suggests(PLAYER_NAME_SUGGESTIONS)
+                                .executes(context -> showViolationHistory(
+                                        context,
+                                        StringArgumentType.getString(context, "player_name")
+                                ))
+                        )
+                        .executes(context -> {
+                            context.getSource().sendMessage(Text.literal("用法: /figantixray violationhistory <玩家名>").formatted(Formatting.YELLOW));
+                            context.getSource().sendMessage(Text.literal("例如: /figantixray violationhistory Steve").formatted(Formatting.WHITE));
+                            context.getSource().sendMessage(Text.literal("功能: 查看玩家的违规记录历史").formatted(Formatting.GRAY));
+                            return 0;
+                        })
+                )
+                // 查看玩家违规时间戳命令
+                .then(CommandManager.literal("violationtimestamps")
+                        .then(CommandManager.argument("player_name", StringArgumentType.string())
+                                .suggests(PLAYER_NAME_SUGGESTIONS)
+                                .executes(context -> showViolationTimestamps(
+                                        context,
+                                        StringArgumentType.getString(context, "player_name")
+                                ))
+                        )
+                        .executes(context -> {
+                            context.getSource().sendMessage(Text.literal("用法: /figantixray violationtimestamps <玩家名>").formatted(Formatting.YELLOW));
+                            context.getSource().sendMessage(Text.literal("例如: /figantixray violationtimestamps Steve").formatted(Formatting.WHITE));
+                            context.getSource().sendMessage(Text.literal("功能: 查看玩家的违规时间戳记录，方便服务器回放查找").formatted(Formatting.GRAY));
+                            return 0;
+                        })
+                )
                 // 删除玩家数据命令
                 .then(CommandManager.literal("deleteplayer")
                         .then(CommandManager.argument("player_name", StringArgumentType.string())
+                                .suggests(PLAYER_NAME_SUGGESTIONS)
                                 .then(CommandManager.argument("password", StringArgumentType.string())
                                         .executes(context -> deletePlayerData(
                                                 context,
@@ -166,6 +274,7 @@ public class XrayCommand {
                 )
                 .then(CommandManager.literal("deleteblockdata")
                         .then(CommandManager.argument("block_id", StringArgumentType.string())
+                                .suggests(BLOCK_ID_SUGGESTIONS)  // 方块ID自动补全
                                 .then(CommandManager.argument("password", StringArgumentType.string())
                                         .executes(context -> deleteBlockData(
                                                 context,
@@ -243,6 +352,17 @@ public class XrayCommand {
         source.sendMessage(Text.literal("  /figantixray oprecord off - 关闭OP玩家记录").formatted(Formatting.WHITE));
         source.sendMessage(Text.literal("  /figantixray oprecord - 查看当前OP记录状态").formatted(Formatting.WHITE));
 
+        source.sendMessage(Text.literal("🎁 奖励管理命令:").formatted(Formatting.AQUA));
+        source.sendMessage(Text.literal("  /figantixray reduceblock <玩家名> <方块ID> <数量> <原因> - 减少玩家方块数量").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("    用于工会奖励发放、活动奖励等场景").formatted(Formatting.GRAY));
+        source.sendMessage(Text.literal("    例如: /figantixray reduceblock Steve minecraft:diamond_ore 5 \"工会奖励发放\"").formatted(Formatting.GRAY));
+        source.sendMessage(Text.literal("  /figantixray reductionhistory <玩家名> - 查看玩家的方块减少记录历史").formatted(Formatting.WHITE));
+
+        source.sendMessage(Text.literal("⚠️ 违规记录命令:").formatted(Formatting.AQUA));
+        source.sendMessage(Text.literal("  /figantixray violationhistory <玩家名> - 查看玩家的违规记录历史").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  /figantixray violationtimestamps <玩家名> - 查看玩家的违规时间戳记录").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("    自动记录超过阈值的玩家数据，便于审查和服务器回放查找").formatted(Formatting.GRAY));
+
         source.sendMessage(Text.literal("🗑️ 数据清理命令:").formatted(Formatting.AQUA));
         source.sendMessage(Text.literal("  /figantixray deleteplayer <玩家名> <密码> - 删除指定玩家的所有数据").formatted(Formatting.WHITE));
         source.sendMessage(Text.literal("    例如: /figantixray deleteplayer Steve my_password").formatted(Formatting.GRAY));
@@ -253,6 +373,12 @@ public class XrayCommand {
         source.sendMessage(Text.literal("  /figantixray changepassword <旧密码> <新密码> - 修改删除操作的密码").formatted(Formatting.WHITE));
         source.sendMessage(Text.literal("    默认密码: default_password_123").formatted(Formatting.GRAY));
 
+        source.sendMessage(Text.literal("🎯 便捷功能:").formatted(Formatting.AQUA));
+        source.sendMessage(Text.literal("  • 玩家名称自动补全 - 输入玩家名时按Tab键自动补全").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  • 方块ID自动补全 - 输入方块ID时按Tab键自动补全并添加引号").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  • 智能建议 - 只显示有数据的玩家和已监控的方块").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  • 实时更新 - 新玩家和方块数据立即反映在补全中").formatted(Formatting.WHITE));
+
         source.sendMessage(Text.literal("📖 帮助命令:").formatted(Formatting.AQUA));
         source.sendMessage(Text.literal("  /figantixray help - 显示此详细帮助信息").formatted(Formatting.WHITE));
         source.sendMessage(Text.literal("  /figantixray - 显示快速命令列表").formatted(Formatting.WHITE));
@@ -262,11 +388,17 @@ public class XrayCommand {
         source.sendMessage(Text.literal("  • 删除操作需要密码验证，请妥善保管密码").formatted(Formatting.YELLOW));
         source.sendMessage(Text.literal("  • 所有命令需要OP权限（权限等级2）").formatted(Formatting.YELLOW));
         source.sendMessage(Text.literal("  • 数据会自动保存，服务器关闭时也会保存").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("  • 违规数据自动存储在 config/figantixray/data/violations/ 目录").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("  • 时间戳记录方便服务器回放查找违规行为").formatted(Formatting.YELLOW));
 
         source.sendMessage(Text.literal("💡 使用技巧:").formatted(Formatting.GREEN));
         source.sendMessage(Text.literal("  • 初始设置: 先修改密码，然后添加需要监控的方块").formatted(Formatting.WHITE));
         source.sendMessage(Text.literal("  • 日常监控: 定期使用 status 和 check 命令查看状态").formatted(Formatting.WHITE));
         source.sendMessage(Text.literal("  • 精细调整: 为稀有方块设置较低的阈值").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  • 奖励管理: 使用 reduceblock 命令处理工会奖励").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  • 违规审查: 使用 violationhistory 查看玩家违规记录").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  • 回放定位: 使用 violationtimestamps 获取服务器回放时间戳").formatted(Formatting.WHITE));
+        source.sendMessage(Text.literal("  • 便捷操作: 使用Tab键自动补全玩家名称和方块ID").formatted(Formatting.WHITE));
         source.sendMessage(Text.literal("  • 数据清理: 定期清理不需要的历史数据").formatted(Formatting.WHITE));
 
         return 1;
@@ -287,15 +419,236 @@ public class XrayCommand {
         source.sendMessage(Text.literal("/figantixray check - 检查所有玩家").formatted(Formatting.YELLOW));
         source.sendMessage(Text.literal("/figantixray check <玩家名> - 检查特定玩家").formatted(Formatting.YELLOW));
         source.sendMessage(Text.literal("/figantixray oprecord <on|off> - 开关OP玩家记录").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("/figantixray reduceblock <玩家名> <方块ID> <数量> <原因> - 减少玩家方块数量").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("/figantixray reductionhistory <玩家名> - 查看减少记录历史").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("/figantixray violationhistory <玩家名> - 查看违规记录历史").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("/figantixray violationtimestamps <玩家名> - 查看违规时间戳记录").formatted(Formatting.YELLOW));
         source.sendMessage(Text.literal("/figantixray deleteplayer <玩家名> <密码> - 删除玩家数据").formatted(Formatting.YELLOW));
         source.sendMessage(Text.literal("/figantixray deleteblockdata \"<方块ID>\" <密码> - 删除方块历史数据").formatted(Formatting.YELLOW));
         source.sendMessage(Text.literal("/figantixray changepassword <旧密码> <新密码> - 修改删除密码").formatted(Formatting.YELLOW));
         source.sendMessage(Text.literal("/figantixray help - 显示详细帮助信息").formatted(Formatting.YELLOW));
+        source.sendMessage(Text.literal("💡 便捷功能: 输入玩家名时按Tab键自动补全，输入方块ID时按Tab键自动补全并添加引号").formatted(Formatting.AQUA));
         source.sendMessage(Text.literal("注意: 所有带冒号的方块ID都需要用引号包裹").formatted(Formatting.RED));
         source.sendMessage(Text.literal("输入 /figantixray help 查看详细使用说明").formatted(Formatting.AQUA));
     }
 
-    // 其他方法保持不变...
+    /**
+     * 显示玩家违规记录历史
+     */
+    private static int showViolationHistory(CommandContext<ServerCommandSource> context, String playerName) {
+        ServerCommandSource source = context.getSource();
+
+        List<File> violationFiles = PlayerDataManager.getPlayerViolationFiles(playerName);
+
+        if (violationFiles.isEmpty()) {
+            source.sendMessage(Text.literal("玩家 " + playerName + " 没有违规记录").formatted(Formatting.GREEN));
+            return 0;
+        }
+
+        source.sendMessage(Text.literal("=== " + playerName + " 的违规记录历史 ===").formatted(Formatting.GOLD));
+        source.sendMessage(Text.literal("总计违规记录: " + violationFiles.size() + " 条").formatted(Formatting.AQUA));
+
+        // 显示最近的10条记录
+        for (int i = 0; i < Math.min(violationFiles.size(), 10); i++) {
+            File violationFile = violationFiles.get(i);
+            Map<String, Object> violationData = PlayerDataManager.readViolationFile(violationFile);
+
+            source.sendMessage(Text.literal("--- 违规记录 #" + (i + 1) + " ---").formatted(Formatting.YELLOW));
+            source.sendMessage(Text.literal("记录时间: " + violationData.get("记录时间")).formatted(Formatting.WHITE));
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> thresholdInfo = (Map<String, Object>) violationData.get("阈值信息");
+            if (thresholdInfo != null) {
+                boolean exceedsGlobal = Boolean.TRUE.equals(thresholdInfo.get("超过全局阈值"));
+                source.sendMessage(Text.literal("超过全局阈值: " + (exceedsGlobal ? "是" : "否")).formatted(
+                        exceedsGlobal ? Formatting.RED : Formatting.GREEN
+                ));
+            }
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> exceededBlocks = (Map<String, Object>) violationData.get("超过阈值的方块");
+            if (exceededBlocks != null && !exceededBlocks.isEmpty()) {
+                source.sendMessage(Text.literal("超过阈值的方块:").formatted(Formatting.RED));
+                for (Map.Entry<String, Object> entry : exceededBlocks.entrySet()) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> blockInfo = (Map<String, Object>) entry.getValue();
+                    source.sendMessage(Text.literal("  - " + blockInfo.get("方块名称") + ": " +
+                            blockInfo.get("当前数量") + " 个 (阈值: " + blockInfo.get("方块阈值") + ")").formatted(Formatting.WHITE));
+                }
+            }
+
+            Object totalMonitored = violationData.get("监控方块总数");
+            if (totalMonitored != null) {
+                source.sendMessage(Text.literal("监控方块总数: " + totalMonitored + " 个").formatted(Formatting.AQUA));
+            }
+
+            // 显示时间戳信息
+            Object replayTimestamp = violationData.get("服务器回放时间戳");
+            if (replayTimestamp != null) {
+                source.sendMessage(Text.literal("服务器回放时间戳: " + replayTimestamp).formatted(Formatting.GRAY));
+            }
+
+            // 显示位置信息
+            Object position = violationData.get("position_readable");
+            if (position != null) {
+                source.sendMessage(Text.literal("位置: " + position).formatted(Formatting.GRAY));
+            }
+
+            // 显示维度信息
+            Object dimension = violationData.get("dimension");
+            if (dimension != null) {
+                source.sendMessage(Text.literal("维度: " + dimension).formatted(Formatting.GRAY));
+            }
+
+            source.sendMessage(Text.literal(""));
+        }
+
+        if (violationFiles.size() > 10) {
+            source.sendMessage(Text.literal("... 还有 " + (violationFiles.size() - 10) + " 条更早的记录").formatted(Formatting.GRAY));
+        }
+
+        source.sendMessage(Text.literal("💡 提示: 违规数据保存在 config/figantixray/data/violations/ 目录下").formatted(Formatting.AQUA));
+        source.sendMessage(Text.literal("💡 提示: 使用 /figantixray violationtimestamps " + playerName + " 查看时间戳记录").formatted(Formatting.AQUA));
+
+        return violationFiles.size();
+    }
+
+    /**
+     * 显示玩家违规时间戳记录
+     */
+    private static int showViolationTimestamps(CommandContext<ServerCommandSource> context, String playerName) {
+        ServerCommandSource source = context.getSource();
+
+        List<Map<String, Object>> timestampRecords = PlayerDataManager.getPlayerViolationTimestamps(playerName);
+
+        if (timestampRecords.isEmpty()) {
+            source.sendMessage(Text.literal("玩家 " + playerName + " 没有违规时间戳记录").formatted(Formatting.GREEN));
+            return 0;
+        }
+
+        source.sendMessage(Text.literal("=== " + playerName + " 的违规时间戳记录 ===").formatted(Formatting.GOLD));
+        source.sendMessage(Text.literal("总计记录: " + timestampRecords.size() + " 条").formatted(Formatting.AQUA));
+        source.sendMessage(Text.literal("💡 提示: 使用这些时间戳可以方便地在服务器回放中定位").formatted(Formatting.AQUA));
+
+        // 显示最近的记录
+        for (int i = timestampRecords.size() - 1; i >= Math.max(0, timestampRecords.size() - 10); i--) {
+            Map<String, Object> record = timestampRecords.get(i);
+
+            source.sendMessage(Text.literal("--- 时间戳记录 #" + (timestampRecords.size() - i) + " ---").formatted(Formatting.YELLOW));
+            source.sendMessage(Text.literal("可读时间: " + record.get("readable_time")).formatted(Formatting.WHITE));
+            source.sendMessage(Text.literal("Unix时间戳: " + record.get("unix_timestamp")).formatted(Formatting.WHITE));
+            source.sendMessage(Text.literal("位置: " + record.get("position")).formatted(Formatting.WHITE));
+            source.sendMessage(Text.literal("维度: " + record.get("dimension")).formatted(Formatting.WHITE));
+            source.sendMessage(Text.literal("总方块数: " + record.get("total_blocks")).formatted(Formatting.AQUA));
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> blockDetails = (Map<String, Object>) record.get("block_details");
+            if (blockDetails != null && !blockDetails.isEmpty()) {
+                source.sendMessage(Text.literal("方块详情:").formatted(Formatting.GRAY));
+                for (Map.Entry<String, Object> entry : blockDetails.entrySet()) {
+                    source.sendMessage(Text.literal("  - " + entry.getKey() + ": " + entry.getValue()).formatted(Formatting.WHITE));
+                }
+            }
+
+            source.sendMessage(Text.literal(""));
+        }
+
+        if (timestampRecords.size() > 10) {
+            source.sendMessage(Text.literal("... 还有 " + (timestampRecords.size() - 10) + " 条更早的记录").formatted(Formatting.GRAY));
+        }
+
+        source.sendMessage(Text.literal("💡 提示: 时间戳记录保存在玩家数据目录下的 violation_timestamps.json").formatted(Formatting.AQUA));
+
+        return timestampRecords.size();
+    }
+
+    /**
+     * 减少玩家方块数量方法
+     */
+    private static int reducePlayerBlock(CommandContext<ServerCommandSource> context, String playerName,
+                                         String blockId, int amount, String reason) {
+        ServerCommandSource source = context.getSource();
+
+        if (!isValidBlockId(blockId)) {
+            source.sendMessage(Text.literal("错误: 方块ID格式不正确").formatted(Formatting.RED));
+            source.sendMessage(Text.literal("方块ID应该是 '命名空间:方块名' 格式，例如 'minecraft:diamond_ore'").formatted(Formatting.YELLOW));
+            source.sendMessage(Text.literal("请使用引号包裹方块ID: /figantixray reduceblock " + playerName + " \"minecraft:diamond_ore\" " + amount + " \"" + reason + "\"").formatted(Formatting.RED));
+            return 0;
+        }
+
+        if (amount <= 0) {
+            source.sendMessage(Text.literal("错误: 减少数量必须大于0").formatted(Formatting.RED));
+            return 0;
+        }
+
+        if (reason == null || reason.trim().isEmpty()) {
+            source.sendMessage(Text.literal("错误: 必须提供减少原因").formatted(Formatting.RED));
+            source.sendMessage(Text.literal("例如: \"工会奖励发放\"、\"活动奖励\"、\"数据修正\"等").formatted(Formatting.YELLOW));
+            return 0;
+        }
+
+        try {
+            boolean success = PlayerDataManager.reducePlayerBlockData(playerName, blockId, amount, reason.trim());
+
+            if (success) {
+                String displayName = ConfigManager.getBlockDisplayName(blockId);
+                source.sendMessage(Text.literal("✅ 已成功减少玩家 " + playerName + " 的 " + displayName + " 数量 " + amount + " 个").formatted(Formatting.GREEN));
+                source.sendMessage(Text.literal("原因: " + reason).formatted(Formatting.GRAY));
+
+                // 显示玩家当前数据
+                PlayerDataManager.PlayerMiningData data = PlayerDataManager.getPlayerDataByName(playerName);
+                if (data != null) {
+                    int currentCount = data.blockCounts.getOrDefault(blockId, 0);
+                    source.sendMessage(Text.literal("当前 " + displayName + " 数量: " + currentCount + " 个").formatted(Formatting.AQUA));
+                }
+            } else {
+                source.sendMessage(Text.literal("错误: 无法减少玩家 " + playerName + " 的方块 " + blockId + " 数量").formatted(Formatting.RED));
+                source.sendMessage(Text.literal("可能原因: 玩家不存在、方块数据不存在或数量不足").formatted(Formatting.YELLOW));
+            }
+
+            return success ? 1 : 0;
+        } catch (Exception e) {
+            source.sendMessage(Text.literal("减少玩家方块数量失败: " + e.getMessage()).formatted(Formatting.RED));
+            return 0;
+        }
+    }
+
+    /**
+     * 显示玩家减少记录历史
+     */
+    private static int showReductionHistory(CommandContext<ServerCommandSource> context, String playerName) {
+        ServerCommandSource source = context.getSource();
+
+        List<Map<String, Object>> records = PlayerDataManager.getPlayerReductionRecords(playerName);
+
+        if (records.isEmpty()) {
+            source.sendMessage(Text.literal("玩家 " + playerName + " 没有方块减少记录").formatted(Formatting.GREEN));
+            return 0;
+        }
+
+        source.sendMessage(Text.literal("=== " + playerName + " 的方块减少记录历史 ===").formatted(Formatting.GOLD));
+        source.sendMessage(Text.literal("总计记录: " + records.size() + " 条").formatted(Formatting.AQUA));
+
+        // 按时间倒序显示最近的记录
+        for (int i = records.size() - 1; i >= Math.max(0, records.size() - 10); i--) {
+            Map<String, Object> record = records.get(i);
+
+            source.sendMessage(Text.literal("--- 记录 #" + (i + 1) + " ---").formatted(Formatting.YELLOW));
+            source.sendMessage(Text.literal("时间: " + record.get("操作时间")).formatted(Formatting.WHITE));
+            source.sendMessage(Text.literal("方块: " + record.get("方块名称") + " (" + record.get("方块ID") + ")").formatted(Formatting.WHITE));
+            source.sendMessage(Text.literal("减少数量: " + record.get("减少数量") + " 个").formatted(Formatting.RED));
+            source.sendMessage(Text.literal("变化: " + record.get("原数量") + " → " + record.get("新数量")).formatted(Formatting.WHITE));
+            source.sendMessage(Text.literal("原因: " + record.get("操作原因")).formatted(Formatting.GRAY));
+            source.sendMessage(Text.literal(""));
+        }
+
+        if (records.size() > 10) {
+            source.sendMessage(Text.literal("... 还有 " + (records.size() - 10) + " 条更早的记录").formatted(Formatting.GRAY));
+        }
+
+        return records.size();
+    }
+
     private static void displayCurrentMonitoredBlocks(ServerCommandSource source) {
         Set<String> blocks = ConfigManager.getMonitoredBlocks();
         if (!blocks.isEmpty()) {
@@ -344,8 +697,7 @@ public class XrayCommand {
 
     private static int showStatus(CommandContext<ServerCommandSource> context) {
         ServerCommandSource source = context.getSource();
-        String currentDate = DATE_FORMAT.format(new Date());
-        List<PlayerDataManager.PlayerMiningData> exceedingPlayers = PlayerDataManager.getPlayersExceedingThreshold(currentDate);
+        List<PlayerDataManager.PlayerMiningData> exceedingPlayers = PlayerDataManager.getPlayersExceedingThreshold();
 
         source.sendMessage(Text.literal("=== Figanti反透视状态 ===").formatted(Formatting.GOLD));
         source.sendMessage(Text.literal("全局警告阈值: " + ConfigManager.getThreshold() + " 个方块"));
@@ -363,7 +715,7 @@ public class XrayCommand {
         }
 
         source.sendMessage(Text.literal("监控方块数量: " + ConfigManager.getMonitoredBlocks().size()));
-        source.sendMessage(Text.literal("今天超过阈值的玩家: " + exceedingPlayers.size() + " 名"));
+        source.sendMessage(Text.literal("超过阈值的玩家: " + exceedingPlayers.size() + " 名"));
 
         if (!exceedingPlayers.isEmpty()) {
             source.sendMessage(Text.literal("超过阈值的玩家:").formatted(Formatting.YELLOW));
@@ -511,13 +863,12 @@ public class XrayCommand {
 
     private static int checkAllPlayers(CommandContext<ServerCommandSource> context) {
         ServerCommandSource source = context.getSource();
-        String date = DATE_FORMAT.format(new Date());
-        List<PlayerDataManager.PlayerMiningData> exceedingPlayers = PlayerDataManager.getPlayersExceedingThreshold(date);
+        List<PlayerDataManager.PlayerMiningData> exceedingPlayers = PlayerDataManager.getPlayersExceedingThreshold();
 
         if (exceedingPlayers.isEmpty()) {
-            source.sendMessage(Text.literal("今天没有玩家超过警告阈值").formatted(Formatting.GREEN));
+            source.sendMessage(Text.literal("当前没有玩家超过警告阈值").formatted(Formatting.GREEN));
         } else {
-            source.sendMessage(Text.literal("今天超过警告阈值的玩家:").formatted(Formatting.YELLOW));
+            source.sendMessage(Text.literal("超过警告阈值的玩家:").formatted(Formatting.YELLOW));
             for (PlayerDataManager.PlayerMiningData data : exceedingPlayers) {
                 source.sendMessage(Text.literal("=== " + data.playerName + " ===").formatted(Formatting.GOLD));
                 source.sendMessage(Text.literal("总计稀有方块: " + data.getTotalMonitoredBlocks() + " 个").formatted(Formatting.AQUA));
